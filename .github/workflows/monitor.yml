@@ -1,0 +1,58 @@
+name: Main-Tauber RSS to Bark
+
+on:
+  schedule:
+    - cron: '0 20 * * *'
+      timezone: 'Europe/Berlin'
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: 'Send exactly one latest RSS item as a Bark test'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check RSS and send Bark
+        env:
+          BARK_KEY: ${{ secrets.BARK_KEY }}
+          TEST_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.test_mode || false }}
+        run: python monitor.py
+
+      - name: Persist notification state
+        if: always()
+        run: |
+          if [ ! -f state.json ]; then
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+
+          if git diff --cached --quiet; then
+            echo "No state changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore: update notification state"
+          git push
