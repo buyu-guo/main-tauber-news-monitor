@@ -155,38 +155,55 @@ def translate_google(title):
 
 
 def translate_mymemory(title):
-    response = _request_with_retry(
-        "https://api.mymemory.translated.net/get",
-        params={
-            "q": title,
-            "langpair": "de|zh-CN",
-        },
-    )
+    errors = []
 
-    data = response.json()
-    status = data.get("responseStatus")
-    if status not in (None, 200, "200"):
-        raise RuntimeError(f"MyMemory returned status {status}")
+    # MyMemory may accept either zh-CN or the generic zh code depending
+    # on the backend language model, so try both.
+    for target in ("zh-CN", "zh"):
+        try:
+            response = _request_with_retry(
+                "https://api.mymemory.translated.net/get",
+                params={
+                    "q": title,
+                    "langpair": f"de|{target}",
+                },
+            )
 
-    translated = (
-        data.get("responseData", {}).get("translatedText", "")
-        if isinstance(data, dict)
-        else ""
-    )
-    translated = html.unescape(str(translated)).strip()
+            data = response.json()
+            status = data.get("responseStatus")
+            if status not in (None, 200, "200"):
+                raise RuntimeError(
+                    f"MyMemory returned status {status}: "
+                    f"{data.get('responseDetails', '')}"
+                )
 
-    if not translated:
-        raise RuntimeError("MyMemory translation response was empty")
+            translated = (
+                data.get("responseData", {}).get("translatedText", "")
+                if isinstance(data, dict)
+                else ""
+            )
+            translated = html.unescape(str(translated)).strip()
 
-    return translated
+            if not translated:
+                raise RuntimeError("MyMemory translation response was empty")
+
+            if translated.casefold() == title.casefold():
+                raise RuntimeError("MyMemory returned the original German text")
+
+            return translated
+
+        except Exception as exc:
+            errors.append(f"{target}: {exc}")
+
+    raise RuntimeError(" | ".join(errors))
 
 
 def translate_title(title):
     errors = []
 
     for name, translator in (
-        ("Google", translate_google),
         ("MyMemory", translate_mymemory),
+        ("Google", translate_google),
     ):
         try:
             translated = translator(title)
