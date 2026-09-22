@@ -208,19 +208,29 @@ def send_bark(german_title, chinese_title, news_url):
     if not bark_key:
         raise RuntimeError("Missing GitHub Actions secret: BARK_KEY")
 
-    payload = {
-        "title": "Main-Tauber-Kreis",
-        "body": f"{german_title}\n{chinese_title}\n{news_url}",
-        "url": news_url,
-        "group": "Main-Tauber-Kreis",
-        "icon": "https://www.main-tauber-kreis.de/favicon.ico",
-    }
+    # Use Bark's GET URL format, matching the format verified manually
+    # on the user's iPhone:
+    #   /:key/:title/:body
+    title = "Main-Tauber-Kreis"
+    body = f"{german_title}\n{chinese_title}\n{news_url}"
 
-    response = requests.post(
-        f"{BARK_API}/{quote(bark_key, safe='')}",
-        json=payload,
-        timeout=20,
+    bark_url = (
+        f"{BARK_API}/{quote(bark_key, safe='')}/"
+        f"{quote(title, safe='')}/{quote(body, safe='')}"
     )
+
+    response = requests.get(
+        bark_url,
+        params={
+            "url": news_url,
+            "group": "Main-Tauber-Kreis",
+        },
+        timeout=20,
+        headers={"User-Agent": USER_AGENT},
+    )
+
+    print(f"Bark HTTP status: {response.status_code}")
+    print(f"Bark response: {response.text[:1000]}")
     response.raise_for_status()
 
     try:
